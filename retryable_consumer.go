@@ -1,6 +1,7 @@
 package kafkaclient
 
 import (
+	"strconv"
 	"time"
 
 	"github.com/Shopify/sarama"
@@ -31,6 +32,11 @@ func (c *RetryableConsumer) Nack(msg Message) {
 		// publish to dead letter queue
 		if c.dlqTopic != "" {
 			c.producer.Input() <- newSaramaProducerMessage(c.dlqTopic, msg.Key, msg.Value)
+			incCounter(c.monitorer, KafkaPublishToDLQ, map[string]string{
+				"topic":      c.dlqTopic,
+				"from_topic": msg.Topic,
+				"attemp":     strconv.FormatInt(int64(c.attemp), 10),
+			})
 		}
 		c.Ack(msg)
 		return
@@ -39,17 +45,22 @@ func (c *RetryableConsumer) Nack(msg Message) {
 	// publish to retry topic
 	if c.nextRetryTopic != "" {
 		c.producer.Input() <- newSaramaProducerMessage(c.nextRetryTopic, msg.Key, msg.Value)
+		incCounter(c.monitorer, KafkaPublishToRetryTopic, map[string]string{
+			"topic":      c.nextRetryTopic,
+			"from_topic": msg.Topic,
+			"attemp":     strconv.FormatInt(int64(c.attemp), 10),
+		})
 	}
 	c.Ack(msg)
 }
 
 // Close to stop consuming message from kafka
 func (c *RetryableConsumer) Close() {
-	close(c.doneChannel)
 	for _, retrier := range c.retriers {
 		retrier.Close()
 	}
-	c.saramaConsumer.Close()
+
+	c.Consumer.Close()
 }
 
 func (c *RetryableConsumer) sleep(d time.Duration) bool {

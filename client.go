@@ -8,38 +8,53 @@ import (
 	cluster "github.com/bsm/sarama-cluster"
 )
 
-// Client client
-type Client struct {
-	cluster.Client
-	config *Config
-}
+type (
+	// Counter is the interface for emitting counter type metrics.
+	Counter interface {
+		// Inc increments the counter by a delta.
+		Inc(delta int64, tags map[string]string)
+	}
+
+	// Monitorer is interface for monitoring
+	Monitorer interface {
+		// Counter returns the Counter object corresponding to the name.
+		Counter(name string) Counter
+	}
+
+	// Client client
+	Client struct {
+		saramaClient cluster.Client
+		config       *Config
+		monitorer    Monitorer
+	}
+)
 
 // NewClient returns a new client for to interact with kafka
-func NewClient(brokers []string, config *Config) (*Client, error) {
+func NewClient(brokers []string, config *Config, monitorer Monitorer) (*Client, error) {
 	c, err := cluster.NewClient(brokers, &config.Config)
 	if err != nil {
 		return nil, err
 	}
 
-	return &Client{*c, config}, nil
+	return &Client{*c, config, monitorer}, nil
 }
 
 // NewAsyncProducer returns a new async producer
 func (c *Client) NewAsyncProducer() (sarama.AsyncProducer, error) {
-	return sarama.NewAsyncProducerFromClient(&c.Client)
+	return sarama.NewAsyncProducerFromClient(&c.saramaClient)
 }
 
 // NewConsumer returns a new consumer
 func (c *Client) NewConsumer(consumerGroup string, topics []string) (*Consumer, error) {
-	client := c.Client // copy the value because sarama does not allow reusing client multiple times
-	consumer, err := cluster.NewConsumerFromClient(&client, consumerGroup, topics)
+	saramaClient := c.saramaClient // copy the value because sarama does not allow reusing client multiple times
+	consumer, err := cluster.NewConsumerFromClient(&saramaClient, consumerGroup, topics)
 	if err != nil {
 		return nil, err
 	}
 
 	doneChannel := make(chan struct{})
 
-	return &Consumer{consumer, doneChannel}, nil
+	return &Consumer{consumer, doneChannel, c.monitorer, consumerGroup, topics}, nil
 }
 
 // NewRetryableConsumer returns a new retryable consumer
@@ -94,7 +109,6 @@ func (c *Client) NewRetryableConsumer(consumerGroup string, topics []string, del
 				case msg := <-messages:
 					delay := retrier.delayCalculator.CalculateDelay(retrier.attemp)
 					if closed := retrier.sleep(delay); closed {
-						retrier.Close()
 						break RetrierConsumeLoop
 					}
 					if succeed := operation(*msg); succeed {
