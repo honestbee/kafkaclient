@@ -41,7 +41,8 @@ func NewClient(brokers []string, config *Config, monitorer Monitorer) (*Client, 
 
 // NewAsyncProducer returns a new async producer
 func (c *Client) NewAsyncProducer() (sarama.AsyncProducer, error) {
-	return sarama.NewAsyncProducerFromClient(&c.saramaClient)
+	saramaClient := c.saramaClient // copy the value because sarama does not allow reusing client multiple times
+	return sarama.NewAsyncProducerFromClient(&saramaClient)
 }
 
 // NewConsumer returns a new consumer
@@ -88,12 +89,17 @@ func (c *Client) NewRetryableConsumer(consumerGroup string, topics []string, del
 		if err != nil {
 			return nil, err
 		}
+		retryProducer, err := c.NewAsyncProducer()
+		if err != nil {
+			return nil, err
+		}
+
 		retrier := &RetryableConsumer{
 			Consumer:        retryConsumer,
 			delayCalculator: delayCalculator,
 			attemp:          retryAttemp,
 			maxAttempt:      maxAttempt,
-			producer:        producer,
+			producer:        retryProducer,
 			dlqTopic:        c.config.DLQTopic,
 			nextRetryTopic:  nextRetryTopic,
 		}
