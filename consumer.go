@@ -4,13 +4,21 @@ import (
 	"strconv"
 	"strings"
 
-	cluster "github.com/bsm/sarama-cluster"
+	"github.com/Shopify/sarama"
 )
 
 type (
+	//go:generate mockery -inpkg -testonly -case underscore -name saramaConsumer
+	saramaConsumer interface {
+		Messages() <-chan *sarama.ConsumerMessage
+		Errors() <-chan error
+		MarkOffset(msg *sarama.ConsumerMessage, metadata string)
+		Close() error
+	}
+
 	// Consumer to consume message from kafka
 	Consumer struct {
-		saramaConsumer *cluster.Consumer
+		saramaConsumer saramaConsumer
 		doneChannel    chan struct{}
 		monitorer      Monitorer
 		consumerGroup  string

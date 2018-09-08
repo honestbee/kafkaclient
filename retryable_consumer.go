@@ -18,7 +18,7 @@ type (
 		*Consumer
 		delayCalculator DelayCalculator
 		producer        sarama.AsyncProducer
-		attemp          int
+		attempt         int
 		maxAttempt      int
 		dlqTopic        string
 		nextRetryTopic  string
@@ -28,7 +28,7 @@ type (
 
 // Nack to not acknowledge the message and publish to retry topic
 func (c *RetryableConsumer) Nack(msg Message) {
-	if c.attemp >= c.maxAttempt {
+	if c.attempt >= c.maxAttempt {
 		// publish to dead letter queue
 		if c.dlqTopic != "" {
 			select {
@@ -36,7 +36,7 @@ func (c *RetryableConsumer) Nack(msg Message) {
 				incCounter(c.monitorer, KafkaPublishToDLQ, map[string]string{
 					"topic":      c.dlqTopic,
 					"from_topic": msg.Topic,
-					"attemp":     strconv.FormatInt(int64(c.attemp), 10),
+					"attempt":    strconv.FormatInt(int64(c.attempt), 10),
 				})
 			case <-c.doneChannel:
 				return
@@ -53,13 +53,19 @@ func (c *RetryableConsumer) Nack(msg Message) {
 			incCounter(c.monitorer, KafkaPublishToRetryTopic, map[string]string{
 				"topic":      c.nextRetryTopic,
 				"from_topic": msg.Topic,
-				"attemp":     strconv.FormatInt(int64(c.attemp), 10),
+				"attempt":    strconv.FormatInt(int64(c.attempt), 10),
 			})
 		case <-c.doneChannel:
 			return
 		}
 	}
 	c.Ack(msg)
+	incCounter(c.monitorer, KafkaPartitionMessagesNack, map[string]string{
+		"consumer_group": c.consumerGroup,
+		"topic":          msg.Topic,
+		"partition":      strconv.FormatInt(int64(msg.Partition), 10),
+		"offset":         strconv.FormatInt(msg.Offset, 10),
+	})
 }
 
 // Close to stop consuming message from kafka

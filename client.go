@@ -1,6 +1,7 @@
 package kafkaclient
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
@@ -10,12 +11,14 @@ import (
 
 type (
 	// Counter is the interface for emitting counter type metrics.
+	//go:generate mockery -inpkg -testonly -case underscore -name Counter
 	Counter interface {
 		// Inc increments the counter by a delta.
 		Inc(delta int64, tags map[string]string)
 	}
 
 	// Monitorer is interface for monitoring
+	//go:generate mockery -inpkg -testonly -case underscore -name Monitorer
 	Monitorer interface {
 		// Counter returns the Counter object corresponding to the name.
 		Counter(name string) Counter
@@ -29,8 +32,16 @@ type (
 	}
 )
 
+var (
+	ErrConfigIsRequired = errors.New("Config is required")
+)
+
 // NewClient returns a new client for to interact with kafka
 func NewClient(brokers []string, config *Config, monitorer Monitorer) (*Client, error) {
+	if config == nil {
+		return nil, ErrConfigIsRequired
+	}
+
 	c, err := cluster.NewClient(brokers, &config.Config)
 	if err != nil {
 		return nil, err
@@ -60,12 +71,22 @@ func (c *Client) NewConsumer(consumerGroup string, topics []string) (*Consumer, 
 
 // NewRetryableConsumer returns a new retryable consumer
 func (c *Client) NewRetryableConsumer(consumerGroup string, topics []string, delayCalculator DelayCalculator, maxAttempt int, operation Operation) (*RetryableConsumer, error) {
-	consumer, err := c.NewConsumer(consumerGroup, topics)
+	return c.newRetryableConsumer(consumerGroup, topics, delayCalculator, maxAttempt, operation, c.NewConsumer, c.NewAsyncProducer)
+}
+
+type (
+	newConsumerFunc      func(string, []string) (*Consumer, error)
+	newAsyncProducerFunc func() (sarama.AsyncProducer, error)
+)
+
+// split into a private method for testing purpose
+func (c *Client) newRetryableConsumer(consumerGroup string, topics []string, delayCalculator DelayCalculator, maxAttempt int, operation Operation, createConsumer newConsumerFunc, createAsyncProducer newAsyncProducerFunc) (*RetryableConsumer, error) {
+	consumer, err := createConsumer(consumerGroup, topics)
 	if err != nil {
 		return nil, err
 	}
 
-	producer, err := c.NewAsyncProducer()
+	producer, err := createAsyncProducer()
 	if err != nil {
 		return nil, err
 	}
@@ -73,23 +94,23 @@ func (c *Client) NewRetryableConsumer(consumerGroup string, topics []string, del
 	firstRetryTopic := ""
 	retriers := make([]*RetryableConsumer, maxAttempt)
 	for i := 0; i < maxAttempt; i++ {
-		retryAttemp := i + 1
-		topic := getRetryTopic(topics, retryAttemp)
+		retryAttempt := i + 1
+		topic := getRetryTopic(topics, retryAttempt)
 		if i == 0 {
 			firstRetryTopic = topic
 		}
 		nextRetryTopic := ""
-		if retryAttemp >= maxAttempt {
+		if retryAttempt >= maxAttempt {
 			nextRetryTopic = c.config.DLQTopic
 		} else {
-			nextRetryTopic = getRetryTopic(topics, retryAttemp+1)
+			nextRetryTopic = getRetryTopic(topics, retryAttempt+1)
 		}
 
-		retryConsumer, err := c.NewConsumer(getRetryConsumerGroup(consumerGroup, retryAttemp), []string{topic})
+		retryConsumer, err := createConsumer(getRetryConsumerGroup(consumerGroup, retryAttempt), []string{topic})
 		if err != nil {
 			return nil, err
 		}
-		retryProducer, err := c.NewAsyncProducer()
+		retryProducer, err := createAsyncProducer()
 		if err != nil {
 			return nil, err
 		}
@@ -97,7 +118,7 @@ func (c *Client) NewRetryableConsumer(consumerGroup string, topics []string, del
 		retrier := &RetryableConsumer{
 			Consumer:        retryConsumer,
 			delayCalculator: delayCalculator,
-			attemp:          retryAttemp,
+			attempt:         retryAttempt,
 			maxAttempt:      maxAttempt,
 			producer:        retryProducer,
 			dlqTopic:        c.config.DLQTopic,
@@ -113,7 +134,7 @@ func (c *Client) NewRetryableConsumer(consumerGroup string, topics []string, del
 			for {
 				select {
 				case msg := <-messages:
-					delay := retrier.delayCalculator.CalculateDelay(retrier.attemp)
+					delay := retrier.delayCalculator.CalculateDelay(retrier.attempt)
 					if closed := retrier.sleep(delay); closed {
 						break RetrierConsumeLoop
 					}
@@ -140,10 +161,10 @@ func (c *Client) NewRetryableConsumer(consumerGroup string, topics []string, del
 	}, nil
 }
 
-func getRetryTopic(topics []string, attemp int) string {
-	return fmt.Sprintf("%s_retry_%d", strings.Join(topics, ","), attemp)
+func getRetryTopic(topics []string, attempt int) string {
+	return fmt.Sprintf("%s_retry_%d", strings.Join(topics, ","), attempt)
 }
 
-func getRetryConsumerGroup(consumerGroup string, attemp int) string {
-	return fmt.Sprintf("%s_retry_%d", consumerGroup, attemp)
+func getRetryConsumerGroup(consumerGroup string, attempt int) string {
+	return fmt.Sprintf("%s_retry_%d", consumerGroup, attempt)
 }
