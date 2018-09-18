@@ -34,7 +34,7 @@ func (c *RetryableConsumer) Nack(msg Message) {
 			c.logger.Info("Publishing message to DLQ.", map[string]interface{}{
 				"from_topic": msg.Topic,
 				"partition":  msg.Partition,
-				"offset":     msg.ConsumerMessage.Key,
+				"offset":     msg.Offset,
 			})
 			_, _, err := c.producer.SendMessage(newSaramaProducerMessage(c.dlqTopic, msg.Key, msg.Value))
 			if err != nil {
@@ -60,7 +60,7 @@ func (c *RetryableConsumer) Nack(msg Message) {
 			"from_topic": msg.Topic,
 			"to_topic":   c.nextRetryTopic,
 			"partition":  msg.Partition,
-			"offset":     msg.ConsumerMessage.Key,
+			"offset":     msg.Offset,
 		})
 		_, _, err := c.producer.SendMessage(newSaramaProducerMessage(c.nextRetryTopic, msg.Key, msg.Value))
 		if err != nil {
