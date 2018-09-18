@@ -48,14 +48,16 @@ func (c *Consumer) Messages() <-chan *Message {
 	ConsumeMessageLoop:
 		for {
 			select {
-			case msg := <-messages:
-				msgChan <- NewMessageFromSaramaMessage(msg)
-				incCounter(c.monitorer, KafkaPartitionMessagesIn, map[string]string{
-					"consumer_group": c.consumerGroup,
-					"topic":          msg.Topic,
-					"partition":      strconv.FormatInt(int64(msg.Partition), 10),
-					"offset":         strconv.FormatInt(msg.Offset, 10),
-				})
+			case msg, ok := <-messages:
+				if ok {
+					msgChan <- NewMessageFromSaramaMessage(msg)
+					incCounter(c.monitorer, KafkaPartitionMessagesIn, map[string]string{
+						"consumer_group": c.consumerGroup,
+						"topic":          msg.Topic,
+						"partition":      strconv.FormatInt(int64(msg.Partition), 10),
+						"offset":         strconv.FormatInt(msg.Offset, 10),
+					})
+				}
 			case <-c.doneChannel:
 				break ConsumeMessageLoop
 			}

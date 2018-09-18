@@ -167,18 +167,20 @@ func (c *Client) newRetryableConsumer(consumerGroup string, topics []string, del
 		RetrierConsumeLoop:
 			for {
 				select {
-				case msg := <-messages:
-					delay := retrier.delayCalculator.CalculateDelay(retrier.attempt)
-					if closed := retrier.sleep(delay); closed {
-						break RetrierConsumeLoop
+				case msg, ok := <-messages:
+					if ok {
+						delay := retrier.delayCalculator.CalculateDelay(retrier.attempt)
+						if closed := retrier.sleep(delay); closed {
+							break RetrierConsumeLoop
+						}
+						if succeed := operation(*msg); succeed {
+							retrier.Ack(*msg)
+						} else {
+							retrier.Nack(*msg)
+						}
 					}
-					if succeed := operation(*msg); succeed {
-						retrier.Ack(*msg)
-					} else {
-						retrier.Nack(*msg)
-					}
-				case err := <-errs:
-					if err != nil {
+				case err, ok := <-errs:
+					if ok && err != nil {
 						c.logger.Error("Error in consuming a message.", map[string]interface{}{
 							"consumer_group": retrier.consumerGroup,
 							"error":          err.Error(),
