@@ -21,6 +21,7 @@ type (
 		saramaConsumer saramaConsumer
 		doneChannel    chan struct{}
 		monitorer      Monitorer
+		logger         Logger
 		consumerGroup  string
 		topics         []string
 	}
@@ -40,6 +41,10 @@ func (c *Consumer) Messages() <-chan *Message {
 		})
 
 		messages := c.saramaConsumer.Messages()
+		c.logger.Info("Consuming messages.", map[string]interface{}{
+			"topic":          c.topics,
+			"consumer_group": c.consumerGroup,
+		})
 	ConsumeMessageLoop:
 		for {
 			select {
@@ -64,6 +69,12 @@ func (c *Consumer) Errors() <-chan error { return c.saramaConsumer.Errors() }
 
 // Ack to acknowledge the message
 func (c *Consumer) Ack(msg Message) {
+	c.logger.Info("Acking a message.", map[string]interface{}{
+		"topic":          c.topics,
+		"consumer_group": c.consumerGroup,
+		"partition":      msg.Partition,
+		"offset":         msg.Offset,
+	})
 	c.saramaConsumer.MarkOffset(msg.ConsumerMessage, "")
 	incCounter(c.monitorer, KafkaPartitionMessagesAck, map[string]string{
 		"consumer_group": c.consumerGroup,
@@ -87,6 +98,9 @@ func (c *Consumer) Nack(msg Message) {
 
 // Close to stop consuming message from kafka
 func (c *Consumer) Close() {
+	c.logger.Info("Closing consumer.", map[string]interface{}{
+		"consumer_group": c.consumerGroup,
+	})
 	close(c.doneChannel)
 	c.saramaConsumer.Close()
 

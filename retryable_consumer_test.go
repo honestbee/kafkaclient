@@ -57,6 +57,7 @@ func newTestConsumer(consumerGroup string, topics []string) (*Consumer, error) {
 		saramaConsumer: &mockSaramaConsumer{},
 		doneChannel:    make(chan struct{}),
 		monitorer:      monitorer,
+		logger:         NewDefaultLogger(),
 		consumerGroup:  consumerGroup,
 		topics:         topics,
 	}
@@ -64,8 +65,8 @@ func newTestConsumer(consumerGroup string, topics []string) (*Consumer, error) {
 	return consumer, nil
 }
 
-func newTestAsyncProducer() (sarama.AsyncProducer, error) {
-	producer := &MockAsyncProducer{}
+func newTestSyncProducer() (sarama.SyncProducer, error) {
+	producer := &MockSyncProducer{}
 
 	return producer, nil
 }
@@ -74,7 +75,7 @@ func createTestRetryableConsumer(t *testing.T, maxAttempt int) *RetryableConsume
 	consumer, err := newTestConsumer("my_group", []string{"my_topic"})
 	testingutil.Ok(t, err)
 
-	producer, err := newTestAsyncProducer()
+	producer, err := newTestSyncProducer()
 	testingutil.Ok(t, err)
 
 	calc := delaycalculator.NewLinearDelayCalculator(0 * time.Second)
@@ -84,7 +85,7 @@ func createTestRetryableConsumer(t *testing.T, maxAttempt int) *RetryableConsume
 		consumer, err := newTestConsumer("my_group", []string{"my_topic"})
 		testingutil.Ok(t, err)
 
-		producer, err := newTestAsyncProducer()
+		producer, err := newTestSyncProducer()
 		testingutil.Ok(t, err)
 
 		retriers[i] = &RetryableConsumer{
@@ -113,7 +114,7 @@ func TestRetryableClose(t *testing.T) {
 
 	saramaConsumer := retryableConsumer.Consumer.saramaConsumer.(*mockSaramaConsumer)
 	saramaConsumer.On("Close").Once().Return(nil)
-	mockProducer := retryableConsumer.producer.(*MockAsyncProducer)
+	mockProducer := retryableConsumer.producer.(*MockSyncProducer)
 	mockProducer.On("Close").Once().Return(nil)
 
 	for i := 0; i < 2; i++ {
@@ -122,7 +123,7 @@ func TestRetryableClose(t *testing.T) {
 		saramaMessages := make(chan *sarama.ConsumerMessage)
 		saramaConsumerRetrier.On("Messages").Once().Return(saramaMessages)
 
-		mockProducerRetrier := retryableConsumer.retriers[i].producer.(*MockAsyncProducer)
+		mockProducerRetrier := retryableConsumer.retriers[i].producer.(*MockSyncProducer)
 		mockProducerRetrier.On("Close").Once().Return(nil)
 	}
 
@@ -144,12 +145,13 @@ func TestRetryableNack(t *testing.T) {
 
 	saramaConsumer := retryableConsumer.Consumer.saramaConsumer.(*mockSaramaConsumer)
 	saramaConsumer.On("MarkOffset", saramaMessage, "").Once()
-	mockProducer := retryableConsumer.producer.(*MockAsyncProducer)
-	mockProducer.On("Input").Once().Return(make(chan<- *sarama.ProducerMessage, 1))
+	mockProducer := retryableConsumer.producer.(*MockSyncProducer)
+	mockProducer.On("SendMessage", newSaramaProducerMessage("my_topic_retry_1", message.Key, message.Value)).Once().Return(int32(0), int64(0), nil)
+
 	saramaConsumerRetrier := retryableConsumer.retriers[0].Consumer.saramaConsumer.(*mockSaramaConsumer)
 	saramaConsumerRetrier.On("MarkOffset", saramaMessage, "").Once()
-	mockProducerRetrier := retryableConsumer.retriers[0].producer.(*MockAsyncProducer)
-	mockProducerRetrier.On("Input").Once().Return(make(chan<- *sarama.ProducerMessage, 1))
+	mockProducerRetrier := retryableConsumer.retriers[0].producer.(*MockSyncProducer)
+	mockProducerRetrier.On("SendMessage", newSaramaProducerMessage("dead_letter_queue", message.Key, message.Value)).Once().Return(int32(0), int64(0), nil)
 
 	retryableConsumer.Nack(message)
 	retryableConsumer.retriers[0].Nack(message)

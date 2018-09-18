@@ -17,7 +17,7 @@ type (
 	RetryableConsumer struct {
 		*Consumer
 		delayCalculator DelayCalculator
-		producer        sarama.AsyncProducer
+		producer        sarama.SyncProducer
 		attempt         int
 		maxAttempt      int
 		dlqTopic        string
@@ -28,19 +28,27 @@ type (
 
 // Nack to not acknowledge the message and publish to retry topic
 func (c *RetryableConsumer) Nack(msg Message) {
+	// publish to dead letter queue
 	if c.attempt >= c.maxAttempt {
-		// publish to dead letter queue
 		if c.dlqTopic != "" {
-			select {
-			case c.producer.Input() <- newSaramaProducerMessage(c.dlqTopic, msg.Key, msg.Value):
-				incCounter(c.monitorer, KafkaPublishToDLQ, map[string]string{
-					"topic":      c.dlqTopic,
+			c.logger.Info("Publishing message to DLQ.", map[string]interface{}{
+				"from_topic": msg.Topic,
+				"partition":  msg.Partition,
+				"offset":     msg.ConsumerMessage.Key,
+			})
+			_, _, err := c.producer.SendMessage(newSaramaProducerMessage(c.dlqTopic, msg.Key, msg.Value))
+			if err != nil {
+				c.logger.Error("Fail to publish message to DLQ.", map[string]interface{}{
 					"from_topic": msg.Topic,
-					"attempt":    strconv.FormatInt(int64(c.attempt), 10),
+					"message":    string(msg.Value),
+					"error":      err.Error(),
 				})
-			case <-c.doneChannel:
-				return
 			}
+			incCounter(c.monitorer, KafkaPublishToDLQ, map[string]string{
+				"topic":      c.dlqTopic,
+				"from_topic": msg.Topic,
+				"attempt":    strconv.FormatInt(int64(c.attempt), 10),
+			})
 		}
 		c.Ack(msg)
 		return
@@ -48,16 +56,26 @@ func (c *RetryableConsumer) Nack(msg Message) {
 
 	// publish to retry topic
 	if c.nextRetryTopic != "" {
-		select {
-		case c.producer.Input() <- newSaramaProducerMessage(c.nextRetryTopic, msg.Key, msg.Value):
-			incCounter(c.monitorer, KafkaPublishToRetryTopic, map[string]string{
-				"topic":      c.nextRetryTopic,
+		c.logger.Info("Publishing message to retry topic.", map[string]interface{}{
+			"from_topic": msg.Topic,
+			"to_topic":   c.nextRetryTopic,
+			"partition":  msg.Partition,
+			"offset":     msg.ConsumerMessage.Key,
+		})
+		_, _, err := c.producer.SendMessage(newSaramaProducerMessage(c.nextRetryTopic, msg.Key, msg.Value))
+		if err != nil {
+			c.logger.Error("Fail to publish message to retry topic.", map[string]interface{}{
 				"from_topic": msg.Topic,
-				"attempt":    strconv.FormatInt(int64(c.attempt), 10),
+				"to_topic":   c.nextRetryTopic,
+				"message":    string(msg.Value),
+				"error":      err.Error(),
 			})
-		case <-c.doneChannel:
-			return
 		}
+		incCounter(c.monitorer, KafkaPublishToRetryTopic, map[string]string{
+			"topic":      c.nextRetryTopic,
+			"from_topic": msg.Topic,
+			"attempt":    strconv.FormatInt(int64(c.attempt), 10),
+		})
 	}
 	c.Ack(msg)
 	incCounter(c.monitorer, KafkaPartitionMessagesNack, map[string]string{

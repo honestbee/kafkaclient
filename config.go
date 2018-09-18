@@ -22,6 +22,8 @@ func NewDefaultConfig() *Config {
 	config.Group.Return.Notifications = false
 	config.Consumer.Return.Errors = true
 	config.Consumer.Offsets.Initial = sarama.OffsetNewest
+	config.Producer.Return.Successes = true
+	config.Producer.Return.Errors = true
 
 	return config
 }

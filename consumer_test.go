@@ -14,6 +14,7 @@ func createTestConsumer(t *testing.T, monitorer Monitorer) *Consumer {
 		saramaConsumer: &mockSaramaConsumer{},
 		doneChannel:    make(chan struct{}),
 		monitorer:      monitorer,
+		logger:         new(MockLogger),
 		consumerGroup:  "my_group",
 		topics:         []string{"my_topic"},
 	}

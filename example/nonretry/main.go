@@ -10,7 +10,7 @@ import (
 
 func main() {
 	config := kafkaclient.NewDefaultConfig()
-	client, err := kafkaclient.NewClient([]string{"127.0.0.1:9092"}, config, nil)
+	client, err := kafkaclient.NewClient([]string{"127.0.0.1:9092"}, config)
 	printErr(err)
 	consumer, err := client.NewConsumer("custom", []string{"sample"})
 	printErr(err)

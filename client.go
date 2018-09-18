@@ -24,20 +24,31 @@ type (
 		Counter(name string) Counter
 	}
 
+	// Logger is interface for logging
+	Logger interface {
+		Info(message string, data map[string]interface{})
+		Error(message string, data map[string]interface{})
+	}
+
 	// Client client
 	Client struct {
 		saramaClient cluster.Client
 		config       *Config
 		monitorer    Monitorer
+		logger       Logger
 	}
+
+	// ClientOption set some option to the client
+	ClientOption func(*Client)
 )
 
 var (
+	// ErrConfigIsRequired config is required
 	ErrConfigIsRequired = errors.New("Config is required")
 )
 
 // NewClient returns a new client for to interact with kafka
-func NewClient(brokers []string, config *Config, monitorer Monitorer) (*Client, error) {
+func NewClient(brokers []string, config *Config, options ...ClientOption) (*Client, error) {
 	if config == nil {
 		return nil, ErrConfigIsRequired
 	}
@@ -46,14 +57,36 @@ func NewClient(brokers []string, config *Config, monitorer Monitorer) (*Client, 
 	if err != nil {
 		return nil, err
 	}
+	client := new(Client)
+	client.saramaClient = *c
+	client.config = config
+	client.logger = NewDefaultLogger()
 
-	return &Client{*c, config, monitorer}, nil
+	for _, option := range options {
+		option(client)
+	}
+
+	return client, nil
 }
 
-// NewAsyncProducer returns a new async producer
-func (c *Client) NewAsyncProducer() (sarama.AsyncProducer, error) {
+// WithMonitorer set monitorer
+func WithMonitorer(monitorer Monitorer) ClientOption {
+	return func(client *Client) {
+		client.monitorer = monitorer
+	}
+}
+
+// WithLogger set logger
+func WithLogger(logger Logger) ClientOption {
+	return func(client *Client) {
+		client.logger = logger
+	}
+}
+
+// NewSyncProducer returns a new sync producer
+func (c *Client) NewSyncProducer() (sarama.SyncProducer, error) {
 	saramaClient := c.saramaClient // copy the value because sarama does not allow reusing client multiple times
-	return sarama.NewAsyncProducerFromClient(&saramaClient)
+	return sarama.NewSyncProducerFromClient(&saramaClient)
 }
 
 // NewConsumer returns a new consumer
@@ -66,27 +99,27 @@ func (c *Client) NewConsumer(consumerGroup string, topics []string) (*Consumer, 
 
 	doneChannel := make(chan struct{})
 
-	return &Consumer{consumer, doneChannel, c.monitorer, consumerGroup, topics}, nil
+	return &Consumer{consumer, doneChannel, c.monitorer, c.logger, consumerGroup, topics}, nil
 }
 
 // NewRetryableConsumer returns a new retryable consumer
 func (c *Client) NewRetryableConsumer(consumerGroup string, topics []string, delayCalculator DelayCalculator, maxAttempt int, operation Operation) (*RetryableConsumer, error) {
-	return c.newRetryableConsumer(consumerGroup, topics, delayCalculator, maxAttempt, operation, c.NewConsumer, c.NewAsyncProducer)
+	return c.newRetryableConsumer(consumerGroup, topics, delayCalculator, maxAttempt, operation, c.NewConsumer, c.NewSyncProducer)
 }
 
 type (
-	newConsumerFunc      func(string, []string) (*Consumer, error)
-	newAsyncProducerFunc func() (sarama.AsyncProducer, error)
+	newConsumerFunc     func(string, []string) (*Consumer, error)
+	newSyncProducerFunc func() (sarama.SyncProducer, error)
 )
 
 // split into a private method for testing purpose
-func (c *Client) newRetryableConsumer(consumerGroup string, topics []string, delayCalculator DelayCalculator, maxAttempt int, operation Operation, createConsumer newConsumerFunc, createAsyncProducer newAsyncProducerFunc) (*RetryableConsumer, error) {
+func (c *Client) newRetryableConsumer(consumerGroup string, topics []string, delayCalculator DelayCalculator, maxAttempt int, operation Operation, createConsumer newConsumerFunc, createSyncProducer newSyncProducerFunc) (*RetryableConsumer, error) {
 	consumer, err := createConsumer(consumerGroup, topics)
 	if err != nil {
 		return nil, err
 	}
 
-	producer, err := createAsyncProducer()
+	producer, err := createSyncProducer()
 	if err != nil {
 		return nil, err
 	}
@@ -110,7 +143,7 @@ func (c *Client) newRetryableConsumer(consumerGroup string, topics []string, del
 		if err != nil {
 			return nil, err
 		}
-		retryProducer, err := createAsyncProducer()
+		retryProducer, err := createSyncProducer()
 		if err != nil {
 			return nil, err
 		}
@@ -130,6 +163,7 @@ func (c *Client) newRetryableConsumer(consumerGroup string, topics []string, del
 	for _, retrier := range retriers {
 		go func(retrier *RetryableConsumer) {
 			messages := retrier.Messages()
+			errs := retrier.Errors()
 		RetrierConsumeLoop:
 			for {
 				select {
@@ -142,6 +176,13 @@ func (c *Client) newRetryableConsumer(consumerGroup string, topics []string, del
 						retrier.Ack(*msg)
 					} else {
 						retrier.Nack(*msg)
+					}
+				case err := <-errs:
+					if err != nil {
+						c.logger.Error("Error in consuming a message.", map[string]interface{}{
+							"consumer_group": retrier.consumerGroup,
+							"error":          err.Error(),
+						})
 					}
 				case <-retrier.doneChannel:
 					break RetrierConsumeLoop
