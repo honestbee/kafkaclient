@@ -1,0 +1,10 @@
+workspace:
+  base: /go/src
+  path: github.com/honestbee/kafkaclient
+
+pipeline:
+  test:
+    image: hendrahuang/golang-dep:1.10-stretch
+    commands:
+      - dep ensure -v -vendor-only
+      - make test
