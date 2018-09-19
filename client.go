@@ -34,6 +34,7 @@ type (
 
 	// Client client
 	Client struct {
+		brokers      []string
 		saramaClient cluster.Client
 		config       *Config
 		monitorer    Monitorer
@@ -60,6 +61,7 @@ func NewClient(brokers []string, config *Config, options ...ClientOption) (*Clie
 		return nil, err
 	}
 	client := new(Client)
+	client.brokers = brokers
 	client.saramaClient = *c
 	client.config = config
 	client.logger = NewDefaultLogger()
@@ -91,14 +93,14 @@ func WithLogger(logger Logger) ClientOption {
 
 // NewSyncProducer returns a new sync producer
 func (c *Client) NewSyncProducer() (sarama.SyncProducer, error) {
-	saramaClient := c.saramaClient // copy the value because sarama does not allow reusing client multiple times
-	return sarama.NewSyncProducerFromClient(&saramaClient)
+	saramaConfig := c.config.Config.Config // copy the value because sarama does not allow reusing config multiple times
+	return sarama.NewSyncProducer(c.brokers, &saramaConfig)
 }
 
 // NewConsumer returns a new consumer
 func (c *Client) NewConsumer(consumerGroup string, topics []string) (*Consumer, error) {
-	saramaClient := c.saramaClient // copy the value because sarama does not allow reusing client multiple times
-	consumer, err := cluster.NewConsumerFromClient(&saramaClient, consumerGroup, topics)
+	saramaClusterConfig := c.config.Config // copy the value because sarama does not allow reusing config multiple times
+	consumer, err := cluster.NewConsumer(c.brokers, consumerGroup, topics, &saramaClusterConfig)
 	if err != nil {
 		return nil, err
 	}
