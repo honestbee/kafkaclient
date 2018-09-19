@@ -45,6 +45,10 @@ var _ kafkaclient.Monitorer = new(Monitoring)
 
 func main() {
 	config := kafkaclient.NewDefaultConfig()
+	config.ClientID = "example_retry"
+	config.Group.Session.Timeout = 60 * time.Second
+	config.Group.Heartbeat.Interval = 5 * time.Second
+	config.Debug = true
 	monitoring := new(Monitoring)
 	monitoring.counters = make(map[string]kafkaclient.Counter)
 	client, err := kafkaclient.NewClient([]string{"127.0.0.1:9092"}, config, kafkaclient.WithMonitorer(monitoring))

@@ -13,12 +13,13 @@ const (
 type Config struct {
 	cluster.Config
 	DLQTopic string
+	Debug    bool
 }
 
 // NewDefaultConfig returns a new configuration instance with sane defaults.
 func NewDefaultConfig() *Config {
 	c := cluster.NewConfig()
-	config := &Config{*c, defaultDLQTopic}
+	config := &Config{*c, defaultDLQTopic, false}
 	config.Group.Return.Notifications = false
 	config.Consumer.Return.Errors = true
 	config.Consumer.Offsets.Initial = sarama.OffsetNewest

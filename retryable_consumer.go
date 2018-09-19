@@ -36,19 +36,24 @@ func (c *RetryableConsumer) Nack(msg Message) {
 				"partition":  msg.Partition,
 				"offset":     msg.Offset,
 			})
-			_, _, err := c.producer.SendMessage(newSaramaProducerMessage(c.dlqTopic, msg.Key, msg.Value))
-			if err != nil {
-				c.logger.Error("Fail to publish message to DLQ.", map[string]interface{}{
+			select {
+			case <-c.doneChannel:
+				return
+			default:
+				_, _, err := c.producer.SendMessage(newSaramaProducerMessage(c.dlqTopic, msg.Key, msg.Value))
+				if err != nil {
+					c.logger.Error("Fail to publish message to DLQ.", map[string]interface{}{
+						"from_topic": msg.Topic,
+						"message":    string(msg.Value),
+						"error":      err.Error(),
+					})
+				}
+				incCounter(c.monitorer, KafkaPublishToDLQ, map[string]string{
+					"topic":      c.dlqTopic,
 					"from_topic": msg.Topic,
-					"message":    string(msg.Value),
-					"error":      err.Error(),
+					"attempt":    strconv.FormatInt(int64(c.attempt), 10),
 				})
 			}
-			incCounter(c.monitorer, KafkaPublishToDLQ, map[string]string{
-				"topic":      c.dlqTopic,
-				"from_topic": msg.Topic,
-				"attempt":    strconv.FormatInt(int64(c.attempt), 10),
-			})
 		}
 		c.Ack(msg)
 		return
@@ -62,20 +67,25 @@ func (c *RetryableConsumer) Nack(msg Message) {
 			"partition":  msg.Partition,
 			"offset":     msg.Offset,
 		})
-		_, _, err := c.producer.SendMessage(newSaramaProducerMessage(c.nextRetryTopic, msg.Key, msg.Value))
-		if err != nil {
-			c.logger.Error("Fail to publish message to retry topic.", map[string]interface{}{
+		select {
+		case <-c.doneChannel:
+			return
+		default:
+			_, _, err := c.producer.SendMessage(newSaramaProducerMessage(c.nextRetryTopic, msg.Key, msg.Value))
+			if err != nil {
+				c.logger.Error("Fail to publish message to retry topic.", map[string]interface{}{
+					"from_topic": msg.Topic,
+					"to_topic":   c.nextRetryTopic,
+					"message":    string(msg.Value),
+					"error":      err.Error(),
+				})
+			}
+			incCounter(c.monitorer, KafkaPublishToRetryTopic, map[string]string{
+				"topic":      c.nextRetryTopic,
 				"from_topic": msg.Topic,
-				"to_topic":   c.nextRetryTopic,
-				"message":    string(msg.Value),
-				"error":      err.Error(),
+				"attempt":    strconv.FormatInt(int64(c.attempt), 10),
 			})
 		}
-		incCounter(c.monitorer, KafkaPublishToRetryTopic, map[string]string{
-			"topic":      c.nextRetryTopic,
-			"from_topic": msg.Topic,
-			"attempt":    strconv.FormatInt(int64(c.attempt), 10),
-		})
 	}
 	c.Ack(msg)
 	incCounter(c.monitorer, KafkaPartitionMessagesNack, map[string]string{
@@ -92,8 +102,8 @@ func (c *RetryableConsumer) Close() {
 		retrier.Close()
 	}
 
-	c.Consumer.Close()
 	c.producer.Close()
+	c.Consumer.Close()
 }
 
 func (c *RetryableConsumer) sleep(d time.Duration) bool {

@@ -3,6 +3,8 @@ package kafkaclient
 import (
 	"errors"
 	"fmt"
+	"log"
+	"os"
 	"strings"
 
 	"github.com/Shopify/sarama"
@@ -64,6 +66,10 @@ func NewClient(brokers []string, config *Config, options ...ClientOption) (*Clie
 
 	for _, option := range options {
 		option(client)
+	}
+
+	if client.config.Debug {
+		sarama.Logger = log.New(os.Stderr, "", log.LstdFlags)
 	}
 
 	return client, nil
