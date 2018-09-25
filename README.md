@@ -1,3 +1,7 @@
+[![Go Report Card](https://goreportcard.com/badge/github.com/honestbee/kafkaclient?style=flat-square)](https://goreportcard.com/report/github.com/honestbee/kafkaclient)
+[![Go Doc](https://img.shields.io/badge/godoc-reference-blue.svg?style=flat-square)](http://godoc.org/github.com/honestbee/kafkaclient)
+[![Release](https://img.shields.io/github/release/honestbee/kafkaclient.svg?style=flat-square)](https://github.com/honestbee/kafkaclient/releases/latest)
+
 # Prelude
 
 The context of this retry is not retrying to publish or consume from kafka if kafka is not reachable. In some kafka library, for example [sarama](https://github.com/Shopify/sarama), they have implemented the retrier if they are unable to publish or consume from kafka. So what does this retry mean ?
