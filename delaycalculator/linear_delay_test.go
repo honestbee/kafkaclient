@@ -13,7 +13,7 @@ func TestCalculateDelay(t *testing.T) {
 
 	testCases := []struct {
 		initialInterval  time.Duration
-		attemp           int
+		attempt          int
 		expectedDuration time.Duration
 	}{
 		{0 * time.Second, 0, 0 * time.Second},
@@ -25,7 +25,7 @@ func TestCalculateDelay(t *testing.T) {
 
 	for _, tc := range testCases {
 		calc := delaycalculator.NewLinearDelayCalculator(tc.initialInterval)
-		duration := calc.CalculateDelay(tc.attemp)
+		duration := calc.CalculateDelay(tc.attempt)
 
 		testingutil.Equals(t, tc.expectedDuration, duration)
 	}

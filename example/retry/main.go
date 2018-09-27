@@ -11,21 +11,25 @@ import (
 	"github.com/honestbee/kafkaclient/delaycalculator"
 )
 
+// CounterMetric is metric type for counter
 type CounterMetric struct {
 	Name  string
 	Count int64
 }
 
+// Inc will add 1 counter to the metric
 func (c *CounterMetric) Inc(delta int64, tags map[string]string) {
 	c.Count += delta
 	fmt.Printf("%s = %d\n", c.Name, c.Count)
 }
 
+// Monitoring for moitoring
 type Monitoring struct {
 	counters map[string]kafkaclient.Counter
 	sync.Mutex
 }
 
+// Counter returns metric for counter
 func (m *Monitoring) Counter(name string) kafkaclient.Counter {
 	if counter, ok := m.counters[name]; ok {
 		return counter

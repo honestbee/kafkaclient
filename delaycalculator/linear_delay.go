@@ -5,7 +5,7 @@ import (
 )
 
 type (
-	// LinearDelayCalculator will calculate linear delay duration based on number of attemps
+	// LinearDelayCalculator will calculate linear delay duration based on number of attempts
 	LinearDelayCalculator struct {
 		initialInterval time.Duration
 	}

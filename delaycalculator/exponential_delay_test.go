@@ -14,7 +14,7 @@ func TestExponentialCalculateDelay(t *testing.T) {
 	testCases := []struct {
 		initialInterval    time.Duration
 		backoffCoefficient float64
-		attemp             int
+		attempt            int
 		expectedDuration   time.Duration
 	}{
 		{0 * time.Second, 2, 0, 0 * time.Second},
@@ -26,7 +26,7 @@ func TestExponentialCalculateDelay(t *testing.T) {
 
 	for _, tc := range testCases {
 		calc := delaycalculator.NewExponentialDelayCalculator(tc.initialInterval, tc.backoffCoefficient)
-		duration := calc.CalculateDelay(tc.attemp)
+		duration := calc.CalculateDelay(tc.attempt)
 
 		testingutil.Equals(t, tc.expectedDuration, duration)
 	}
