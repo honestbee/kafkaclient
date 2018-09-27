@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/Shopify/sarama"
+	cluster "github.com/bsm/sarama-cluster"
 	"github.com/honestbee/kafkaclient/testingutil"
 	"github.com/stretchr/testify/mock"
 )
@@ -42,6 +43,7 @@ func TestMessages(t *testing.T) {
 	saramaMessages := make(chan *sarama.ConsumerMessage)
 	saramaConsumer := consumer.saramaConsumer.(*mockSaramaConsumer)
 	saramaConsumer.On("Messages").Once().Return(saramaMessages)
+	saramaConsumer.On("Notifications").Once().Return(make(<-chan *cluster.Notification))
 
 	consumer.saramaConsumer = saramaConsumer
 	consumerMessages := consumer.Messages()

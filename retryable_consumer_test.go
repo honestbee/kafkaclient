@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/Shopify/sarama"
+	cluster "github.com/bsm/sarama-cluster"
 	"github.com/honestbee/kafkaclient/delaycalculator"
 	"github.com/honestbee/kafkaclient/testingutil"
 	"github.com/stretchr/testify/mock"
@@ -122,6 +123,7 @@ func TestRetryableClose(t *testing.T) {
 		saramaConsumerRetrier.On("Close").Once().Return(nil)
 		saramaMessages := make(chan *sarama.ConsumerMessage)
 		saramaConsumerRetrier.On("Messages").Once().Return(saramaMessages)
+		saramaConsumer.On("Notifications").Once().Return(make(<-chan *cluster.Notification))
 
 		mockProducerRetrier := retryableConsumer.retriers[i].producer.(*MockSyncProducer)
 		mockProducerRetrier.On("Close").Once().Return(nil)

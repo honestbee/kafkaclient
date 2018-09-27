@@ -1,10 +1,12 @@
 package kafkaclient
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
 
 	"github.com/Shopify/sarama"
+	cluster "github.com/bsm/sarama-cluster"
 )
 
 type (
@@ -12,6 +14,7 @@ type (
 	saramaConsumer interface {
 		Messages() <-chan *sarama.ConsumerMessage
 		Errors() <-chan error
+		Notifications() <-chan *cluster.Notification
 		MarkOffset(msg *sarama.ConsumerMessage, metadata string)
 		Close() error
 	}
@@ -45,6 +48,8 @@ func (c *Consumer) Messages() <-chan *Message {
 			"topic":          c.topics,
 			"consumer_group": c.consumerGroup,
 		})
+
+		notifications := c.saramaConsumer.Notifications()
 	ConsumeMessageLoop:
 		for {
 			select {
@@ -56,6 +61,14 @@ func (c *Consumer) Messages() <-chan *Message {
 						"topic":          msg.Topic,
 						"partition":      strconv.FormatInt(int64(msg.Partition), 10),
 						"offset":         strconv.FormatInt(msg.Offset, 10),
+					})
+				}
+			case notification, ok := <-notifications:
+				if ok {
+					c.logger.Info(fmt.Sprintf("Rebalancing consumer group, status %s.", notification.Type), map[string]interface{}{
+						"claimed":  notification.Claimed,
+						"released": notification.Released,
+						"current":  notification.Current,
 					})
 				}
 			case <-c.doneChannel:

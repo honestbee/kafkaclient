@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/Shopify/sarama"
+	cluster "github.com/bsm/sarama-cluster"
 	"github.com/honestbee/kafkaclient/delaycalculator"
 	"github.com/honestbee/kafkaclient/testingutil"
 )
@@ -64,7 +65,8 @@ func TestNewRetryableConsumer(t *testing.T) {
 		saramaConsumer.On("Close").Once().Return(nil)
 		saramaMessages := make(chan *sarama.ConsumerMessage)
 		saramaConsumer.On("Messages").Once().Return(saramaMessages)
-		saramaConsumer.On("Errors").Once().Return(make(chan error))
+		saramaConsumer.On("Notifications").Once().Return(make(<-chan *cluster.Notification))
+		saramaConsumer.On("Errors").Once().Return(make(<-chan error))
 	}
 
 	producer := consumer.producer.(*MockSyncProducer)

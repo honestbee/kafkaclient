@@ -20,7 +20,7 @@ type Config struct {
 func NewDefaultConfig() *Config {
 	c := cluster.NewConfig()
 	config := &Config{*c, defaultDLQTopic, false}
-	config.Group.Return.Notifications = false
+	config.Group.Return.Notifications = true
 	config.Consumer.Return.Errors = true
 	config.Consumer.Offsets.Initial = sarama.OffsetNewest
 	config.Producer.Return.Successes = true
