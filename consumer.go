@@ -60,7 +60,6 @@ func (c *Consumer) Messages() <-chan *Message {
 						"consumer_group": c.consumerGroup,
 						"topic":          msg.Topic,
 						"partition":      strconv.FormatInt(int64(msg.Partition), 10),
-						"offset":         strconv.FormatInt(msg.Offset, 10),
 					})
 				}
 			case notification, ok := <-notifications:
@@ -95,7 +94,6 @@ func (c *Consumer) Ack(msg Message) {
 		"consumer_group": c.consumerGroup,
 		"topic":          msg.Topic,
 		"partition":      strconv.FormatInt(int64(msg.Partition), 10),
-		"offset":         strconv.FormatInt(msg.Offset, 10),
 	})
 }
 
@@ -107,7 +105,6 @@ func (c *Consumer) Nack(msg Message) {
 		"consumer_group": c.consumerGroup,
 		"topic":          msg.Topic,
 		"partition":      strconv.FormatInt(int64(msg.Partition), 10),
-		"offset":         strconv.FormatInt(msg.Offset, 10),
 	})
 }
 

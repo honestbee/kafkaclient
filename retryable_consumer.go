@@ -92,7 +92,6 @@ func (c *RetryableConsumer) Nack(msg Message) {
 		"consumer_group": c.consumerGroup,
 		"topic":          msg.Topic,
 		"partition":      strconv.FormatInt(int64(msg.Partition), 10),
-		"offset":         strconv.FormatInt(msg.Offset, 10),
 	})
 }
 
