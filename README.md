@@ -42,6 +42,20 @@ We will have some retry topics based on the number of maximum attempt. For examp
 
 This retry scenario is not for every usecases. For some usecases where ordering in the topic is important, this retry scenario will mess up the ordering.
 
+# DLQ Retrier
+
+It will retry the messages in DLQ by pumping them back to the first retry topic or the non-retry topic.
+
+```
+go run cmd/dlqretrier/main.go -host 127.0.0.1:9092 -dlqTopic dlq -startingOffset -1
+```
+
+host: host of the kafka broker.
+
+dlqTopic: name of the topic for DLQ.
+
+startingOffset: start consuming the message from this offset. -1 means start consuming from the newest message.
+
 # Example
 
 Go to the `example` folder for some examples of how to use the library.

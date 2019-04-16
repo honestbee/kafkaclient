@@ -148,13 +148,14 @@ func TestRetryableNack(t *testing.T) {
 	saramaConsumer := retryableConsumer.Consumer.saramaConsumer.(*mockSaramaConsumer)
 	saramaConsumer.On("MarkOffset", saramaMessage, "").Once()
 	mockProducer := retryableConsumer.producer.(*MockSyncProducer)
-	mockProducer.On("SendMessage", newSaramaProducerMessage("my_topic_retry_1", message.Key, message.Value)).Once().Return(int32(0), int64(0), nil)
+	mockProducer.On("SendMessage", NewSaramaProducerMessage("my_topic_retry_1", message.Key, message.Value)).Once().Return(int32(0), int64(0), nil)
 
 	saramaConsumerRetrier := retryableConsumer.retriers[0].Consumer.saramaConsumer.(*mockSaramaConsumer)
 	saramaConsumerRetrier.On("MarkOffset", saramaMessage, "").Once()
 	mockProducerRetrier := retryableConsumer.retriers[0].producer.(*MockSyncProducer)
-	mockProducerRetrier.On("SendMessage", newSaramaProducerMessage("dead_letter_queue", message.Key, message.Value)).Once().Return(int32(0), int64(0), nil)
-
+	dlqMessage, err := NewSaramaProducerDLQMessage(message, "dead_letter_queue")
+	testingutil.Ok(t, err)
+	mockProducerRetrier.On("SendMessage", dlqMessage).Once().Return(int32(0), int64(0), nil)
 	retryableConsumer.Nack(message)
 	retryableConsumer.retriers[0].Nack(message)
 }

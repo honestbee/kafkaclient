@@ -40,7 +40,15 @@ func (c *RetryableConsumer) Nack(msg Message) {
 			case <-c.doneChannel:
 				return
 			default:
-				_, _, err := c.producer.SendMessage(newSaramaProducerMessage(c.dlqTopic, msg.Key, msg.Value))
+				dlqMessage, err := NewSaramaProducerDLQMessage(msg, c.dlqTopic)
+				if err != nil {
+					c.logger.Error("Fail to create DLQ message.", map[string]interface{}{
+						"from_topic": msg.Topic,
+						"message":    string(msg.Value),
+						"error":      err.Error(),
+					})
+				}
+				_, _, err = c.producer.SendMessage(dlqMessage)
 				if err != nil {
 					c.logger.Error("Fail to publish message to DLQ.", map[string]interface{}{
 						"from_topic": msg.Topic,
@@ -71,7 +79,7 @@ func (c *RetryableConsumer) Nack(msg Message) {
 		case <-c.doneChannel:
 			return
 		default:
-			_, _, err := c.producer.SendMessage(newSaramaProducerMessage(c.nextRetryTopic, msg.Key, msg.Value))
+			_, _, err := c.producer.SendMessage(NewSaramaProducerMessage(c.nextRetryTopic, msg.Key, msg.Value))
 			if err != nil {
 				c.logger.Error("Fail to publish message to retry topic.", map[string]interface{}{
 					"from_topic": msg.Topic,
